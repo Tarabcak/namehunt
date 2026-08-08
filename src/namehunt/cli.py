@@ -13,6 +13,7 @@ from pathlib import Path
 
 import httpx
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from namehunt.availability import DomainCheck, check_domains, doh_prefilter
@@ -86,7 +87,9 @@ def _cmd_run(args: argparse.Namespace, console: Console, errors: Console) -> int
     _validate_counts(args)
     provider_name = args.provider or os.environ.get("NAMEHUNT_PROVIDER") or "claude"
     if provider_name not in DEFAULT_MODELS:
-        raise ValueError(f"unknown provider {provider_name!r}: expected 'claude' or 'openai'")
+        raise ValueError(
+            f"unknown provider {provider_name!r}: expected 'claude', 'claudecode' or 'openai'"
+        )
     model = args.model or DEFAULT_MODELS[provider_name]
     if session_path(args.session).exists():
         sess = load_session(args.session)
@@ -163,6 +166,11 @@ def _loop(
         console.print()
         console.print(f"session saved - resume with: uv run namehunt resume --session {sess.name}")
         return 0
+    except Exception as exc:  # provider/CLI failure mid-round: keep state, fail cleanly
+        save_session(sess)
+        console.print(f"[red]error:[/] {escape(str(exc))}")
+        console.print(f"session saved - resume with: uv run namehunt resume --session {sess.name}")
+        return 1
     save_session(sess)
     console.print(CAVEAT)
     console.print(f"export with: uv run namehunt export --session {sess.name} --format md")
@@ -275,7 +283,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", parents=[loop_flags], help="start (or continue) a session")
     run.add_argument("--brief", help="path to a markdown/text brief (required on first run)")
     run.add_argument("--tlds", default=DEFAULT_TLDS, help=f"comma-separated ({DEFAULT_TLDS})")
-    run.add_argument("--provider", choices=["claude", "openai"], help="or $NAMEHUNT_PROVIDER")
+    run.add_argument(
+        "--provider", choices=["claude", "claudecode", "openai"], help="or $NAMEHUNT_PROVIDER"
+    )
     run.add_argument("--model", help="model override")
     run.add_argument("--style", help='style steering, e.g. "short, mythic, 2 syllables"')
     run.add_argument("--session", default="default", help="session name")

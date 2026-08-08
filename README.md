@@ -21,16 +21,23 @@ Optional OpenAI support:
 uv sync --extra openai
 ```
 
-## Environment variables
+## Providers & environment variables
 
-| Variable | Purpose |
-|---|---|
-| `ANTHROPIC_API_KEY` | required for the default `claude` provider |
-| `OPENAI_API_KEY` | required only with `--provider openai` |
-| `NAMEHUNT_PROVIDER` | default provider (`claude` or `openai`) when `--provider` is omitted |
-| `NAMEHUNT_HOME` | state directory override (default `~/.namehunt` — sessions + RDAP bootstrap cache) |
+| Provider | Auth | Notes |
+|---|---|---|
+| `claude` (default) | `ANTHROPIC_API_KEY` | Anthropic API, billed per token |
+| `claudecode` | your existing Claude Code login | runs `claude -p` headless on your Pro/Max **subscription** — no API credits. Requires Claude Code installed & signed in. Personal use only: Anthropic [does not allow](https://code.claude.com/docs/en/agent-sdk/overview) shipping products on claude.ai login, and any `ANTHROPIC_API_KEY` in the env is withheld from the subprocess so it can never bill the API |
+| `openai` | `OPENAI_API_KEY` | needs `uv sync --extra openai` |
 
-Keys are read from the environment only and are never written to disk.
+Other variables: `NAMEHUNT_PROVIDER` picks the default provider when `--provider` is
+omitted; `NAMEHUNT_HOME` overrides the state directory (default `~/.namehunt` —
+sessions + RDAP bootstrap cache). Keys are read from the environment only and are
+never written to disk.
+
+```bash
+# subscription-powered, no API key needed:
+uv run namehunt run --brief examples/brief.md --provider claudecode
+```
 
 ## 60-second quickstart
 
