@@ -12,6 +12,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run pytest -q >&2 || exit 2",
+            "timeout": 120
+          }
+        ]
+      }
     ]
   }
 }
