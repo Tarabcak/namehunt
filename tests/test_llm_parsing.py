@@ -256,3 +256,45 @@ def test_claude_provider_constructs_offline(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-real")
     provider = make_provider("claude", "claude-sonnet-4-6")
     assert provider.name == "claude"
+
+
+# ------------------------------------------------- note recency (added later)
+# Added after the original red commit: in long sessions, old steering notes
+# drowned out the newest round's directive. Recent notes must render as the
+# active brief; older ones as demoted background.
+
+
+def test_build_messages_recent_notes_render_as_current_direction():
+    ctx = make_ctx(
+        notes=["old brief one", "old brief two", "newest direction", "newest rules"]
+    )
+    _system, user = build_messages(ctx)
+    i_taken = user.index("TAKEN STEMS")
+    i_earlier = user.index("EARLIER NOTES")
+    i_never = user.index("DO NOT REPEAT")
+    i_current = user.index("CURRENT DIRECTION")
+    i_task = user.index("TASK:")
+    # earlier notes sit demoted mid-prompt; current direction sits last, by TASK
+    assert i_taken < i_earlier < i_never < i_current < i_task
+    current_block = user[i_current:i_task]
+    earlier_block = user[i_earlier:i_never]
+    assert "newest direction" in current_block
+    assert "newest rules" in current_block
+    assert "old brief one" not in current_block
+    assert "old brief two" not in current_block
+    assert "old brief one" in earlier_block
+    assert "old brief two" in earlier_block
+    assert "newest direction" not in earlier_block
+
+
+def test_build_messages_two_or_fewer_notes_are_all_current():
+    _system, user = build_messages(make_ctx(notes=["only note"]))
+    assert "CURRENT DIRECTION" in user
+    assert "EARLIER NOTES" not in user
+    assert "only note" in user[user.index("CURRENT DIRECTION") :]
+
+
+def test_build_messages_no_notes_means_no_note_headers():
+    _system, user = build_messages(make_ctx())
+    assert "CURRENT DIRECTION" not in user
+    assert "EARLIER NOTES" not in user
