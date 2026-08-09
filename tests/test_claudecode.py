@@ -118,3 +118,33 @@ def test_complete_timeout_raises_clean_error(monkeypatch, cli_present):
     provider = make_provider("claudecode", "sonnet")
     with pytest.raises(RuntimeError, match="timed out"):
         provider.complete(system="s", user="u")
+
+
+def test_complete_scrubs_nested_session_env_and_pins_effort(monkeypatch, cli_present):
+    """When namehunt itself runs inside a Claude Code session, the harness's
+    CLAUDE* session vars must not leak into the nested CLI (inherited
+    effort=max makes generations think unboundedly and time out)."""
+    monkeypatch.setenv("CLAUDECODE", "1")
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "sess-abc")
+    monkeypatch.setenv("CLAUDE_CODE_EFFORT_LEVEL", "max")
+    monkeypatch.setenv("CLAUDE_EFFORT", "max")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "keep-me")  # legit headless auth
+    seen: dict[str, object] = {}
+
+    def fake_run(argv, **kwargs):
+        seen["argv"] = list(argv)
+        seen["env"] = kwargs["env"]
+        return subprocess.CompletedProcess(argv, 0, stdout=_ok_payload('["oak"]'), stderr="")
+
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    provider = make_provider("claudecode", "sonnet")
+    assert provider.complete(system="s", user="u") == '["oak"]'
+
+    env = seen["env"]
+    assert "CLAUDECODE" not in env
+    assert "CLAUDE_CODE_SESSION_ID" not in env
+    assert "CLAUDE_CODE_EFFORT_LEVEL" not in env
+    assert "CLAUDE_EFFORT" not in env
+    assert env.get("CLAUDE_CODE_OAUTH_TOKEN") == "keep-me"
+    argv = seen["argv"]
+    assert "--effort" in argv  # explicit, so no ambient setting can inflate it
