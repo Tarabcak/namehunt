@@ -8,6 +8,8 @@ from __future__ import annotations
 import io
 
 import pytest
+from rich.console import Console
+
 from namehunt.llm import (
     MissingKeyError,
     RoundContext,
@@ -16,7 +18,6 @@ from namehunt.llm import (
     make_provider,
     parse_names,
 )
-from rich.console import Console
 
 
 class FakeProvider:
@@ -265,9 +266,7 @@ def test_claude_provider_constructs_offline(monkeypatch):
 
 
 def test_build_messages_recent_notes_render_as_current_direction():
-    ctx = make_ctx(
-        notes=["old brief one", "old brief two", "newest direction", "newest rules"]
-    )
+    ctx = make_ctx(notes=["old brief one", "old brief two", "newest direction", "newest rules"])
     _system, user = build_messages(ctx)
     i_taken = user.index("TAKEN STEMS")
     i_earlier = user.index("EARLIER NOTES")

@@ -24,6 +24,7 @@ DEFAULT_MODELS = {"claude": "claude-sonnet-4-6", "openai": "gpt-4.1-mini", "clau
 KEY_ENV_VARS = {"claude": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}  # claudecode: none
 MAX_COMPLETION_TOKENS = 2048
 INVALID_WARN_RATIO = 0.3
+CURRENT_NOTES_COUNT = 2  # newest notes render as the active brief, older ones as background
 
 _STEM_RE = re.compile(r"[a-z]{3,12}\Z")
 _ARRAY_RE = re.compile(r"\[.*?\]", re.DOTALL)
@@ -304,14 +305,20 @@ def build_messages(ctx: RoundContext) -> tuple[str, str]:
         lines.append("USER LIKES: " + ", ".join(ctx.likes))
     if ctx.dislikes:
         lines.append("USER DISLIKES: " + ", ".join(ctx.dislikes))
-    if ctx.notes:
-        lines.append("USER NOTES:")
-        lines += [f"- {n}" for n in ctx.notes]
-    if ctx.likes or ctx.dislikes or ctx.notes:
+    earlier_notes = ctx.notes[:-CURRENT_NOTES_COUNT]
+    current_notes = ctx.notes[-CURRENT_NOTES_COUNT:]
+    if earlier_notes:
+        lines.append("EARLIER NOTES (background):")
+        lines += [f"- {n}" for n in earlier_notes]
+    if ctx.likes or ctx.dislikes or earlier_notes:
         lines.append("")
     lines.append("DO NOT REPEAT ANY OF THESE STEMS:")
     lines.append(", ".join(sorted(ctx.all_generated)) if ctx.all_generated else "(nothing yet)")
     lines.append("")
+    if current_notes:
+        lines.append("CURRENT DIRECTION (overrides earlier notes):")
+        lines += [f"- {n}" for n in current_notes]
+        lines.append("")
     lines.append(
         f"TASK: Generate exactly {ctx.batch} NEW candidate name stems for this brief. "
         "Favor the patterns of the available and liked names; avoid the patterns of "
