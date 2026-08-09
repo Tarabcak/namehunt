@@ -129,6 +129,8 @@ class ClaudeCodeProvider:
             "json",
             "--model",
             self._model,
+            "--tools",
+            "",  # pure completion: no tools, so headless mode can never hang on approval
         ]
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
         try:
