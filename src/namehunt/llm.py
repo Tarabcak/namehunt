@@ -131,8 +131,10 @@ class ClaudeCodeProvider:
             self._model,
             "--tools",
             "",  # pure completion: no tools, so headless mode can never hang on approval
+            "--effort",
+            "low",  # listing names needs no deep thinking; ambient effort=max would hang
         ]
-        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        env = _nested_cli_env()
         try:
             proc = subprocess.run(
                 argv,
@@ -158,6 +160,25 @@ class ClaudeCodeProvider:
         if not isinstance(result, str):
             raise RuntimeError("claude CLI returned no result text")
         return result
+
+
+def _nested_cli_env() -> dict[str, str]:
+    """Subprocess env for the nested claude CLI, as if launched from a fresh shell.
+
+    Drops ANTHROPIC_API_KEY (subscription login must never fall back to API
+    billing) and the CLAUDE* session vars a parent Claude Code session injects
+    (an inherited effort=max makes generations think until they time out).
+    CLAUDE_CODE_OAUTH_TOKEN survives: users set it deliberately for headless auth.
+    """
+    prefixes = ("CLAUDE_CODE_", "CLAUDE_EFFORT", "CLAUDE_PID", "CLAUDE_AGENT_", "CLAUDE_PREVIEW_")
+    env: dict[str, str] = {}
+    for key, value in os.environ.items():
+        if key == "ANTHROPIC_API_KEY":
+            continue
+        if key != "CLAUDE_CODE_OAUTH_TOKEN" and (key == "CLAUDECODE" or key.startswith(prefixes)):
+            continue
+        env[key] = value
+    return env
 
 
 def make_provider(provider: str, model: str) -> Provider:
