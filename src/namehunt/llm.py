@@ -104,7 +104,7 @@ class ClaudeCodeProvider:
     """
 
     name = "claudecode"
-    timeout_seconds = 180.0
+    timeout_seconds = 360.0  # creative batches with adaptive thinking can run minutes
 
     def __init__(self, model: str) -> None:
         binary = shutil.which("claude")
