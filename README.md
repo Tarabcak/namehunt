@@ -97,6 +97,7 @@ to map to `unknown`, never `available`.
 
 ---
 
-*namehunt was built in one weekend to rename our own startup (story coming
-soon). If your agents write code in one repo, ask us what happens to the other
-forty. — Róbert & Norbert*
+*namehunt was built in one weekend to rename our own startup — it's called
+**prescry** now (prescry.com), the cross-repo impact layer for AI coding
+agents: your agents write code in one repo, prescry makes sure it doesn't
+break the other forty. Story coming soon. — Róbert & Norbert*
