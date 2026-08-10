@@ -88,7 +88,8 @@ def _cmd_run(args: argparse.Namespace, console: Console, errors: Console) -> int
     provider_name = args.provider or os.environ.get("NAMEHUNT_PROVIDER") or "claude"
     if provider_name not in DEFAULT_MODELS:
         raise ValueError(
-            f"unknown provider {provider_name!r}: expected 'claude', 'claudecode' or 'openai'"
+            f"unknown provider {provider_name!r}: expected 'claude', 'claudecode', "
+            "'codexcli' or 'openai'"
         )
     model = args.model or DEFAULT_MODELS[provider_name]
     if session_path(args.session).exists():
@@ -284,7 +285,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--brief", help="path to a markdown/text brief (required on first run)")
     run.add_argument("--tlds", default=DEFAULT_TLDS, help=f"comma-separated ({DEFAULT_TLDS})")
     run.add_argument(
-        "--provider", choices=["claude", "claudecode", "openai"], help="or $NAMEHUNT_PROVIDER"
+        "--provider",
+        choices=["claude", "claudecode", "codexcli", "openai"],
+        help="or $NAMEHUNT_PROVIDER",
     )
     run.add_argument("--model", help="model override")
     run.add_argument("--style", help='style steering, e.g. "short, mythic, 2 syllables"')

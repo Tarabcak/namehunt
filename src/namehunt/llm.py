@@ -20,8 +20,13 @@ from rich.console import Console
 from namehunt.availability import Availability
 from namehunt.session import Session, state_home
 
-DEFAULT_MODELS = {"claude": "claude-sonnet-4-6", "openai": "gpt-4.1-mini", "claudecode": "sonnet"}
-KEY_ENV_VARS = {"claude": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}  # claudecode: none
+DEFAULT_MODELS = {
+    "claude": "claude-sonnet-4-6",
+    "openai": "gpt-4.1-mini",
+    "claudecode": "sonnet",
+    "codexcli": "default",  # sentinel: use the model configured in the user's codex CLI
+}
+KEY_ENV_VARS = {"claude": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}  # CLI providers: none
 MAX_COMPLETION_TOKENS = 2048
 INVALID_WARN_RATIO = 0.3
 CURRENT_NOTES_COUNT = 2  # newest notes render as the active brief, older ones as background
@@ -164,17 +169,18 @@ class ClaudeCodeProvider:
 
 
 def _nested_cli_env() -> dict[str, str]:
-    """Subprocess env for the nested claude CLI, as if launched from a fresh shell.
+    """Subprocess env for a nested claude/codex CLI, as if launched from a fresh shell.
 
-    Drops ANTHROPIC_API_KEY (subscription login must never fall back to API
-    billing) and the CLAUDE* session vars a parent Claude Code session injects
-    (an inherited effort=max makes generations think until they time out).
-    CLAUDE_CODE_OAUTH_TOKEN survives: users set it deliberately for headless auth.
+    Drops ANTHROPIC_API_KEY and OPENAI_API_KEY (subscription logins must never
+    fall back to API billing) and the CLAUDE* session vars a parent Claude Code
+    session injects (an inherited effort=max makes generations think until they
+    time out). CLAUDE_CODE_OAUTH_TOKEN survives: users set it deliberately for
+    headless auth.
     """
     prefixes = ("CLAUDE_CODE_", "CLAUDE_EFFORT", "CLAUDE_PID", "CLAUDE_AGENT_", "CLAUDE_PREVIEW_")
     env: dict[str, str] = {}
     for key, value in os.environ.items():
-        if key == "ANTHROPIC_API_KEY":
+        if key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
             continue
         if key != "CLAUDE_CODE_OAUTH_TOKEN" and (key == "CLAUDECODE" or key.startswith(prefixes)):
             continue
@@ -182,14 +188,76 @@ def _nested_cli_env() -> dict[str, str]:
     return env
 
 
+class CodexCliProvider:
+    """Non-interactive `codex exec` — rides the local Codex CLI (ChatGPT) login.
+
+    Same personal-use posture as ClaudeCodeProvider: no API key involved, and
+    OPENAI_API_KEY is withheld from the subprocess so calls never bill the API.
+    Runs sandboxed read-only, so generation can never execute anything.
+    """
+
+    name = "codexcli"
+    timeout_seconds = 480.0
+
+    def __init__(self, model: str) -> None:
+        binary = shutil.which("codex")
+        if binary is None:
+            raise ValueError(
+                "codex CLI not found for provider 'codexcli' - install Codex and sign in, "
+                "or use --provider openai with an API key"
+            )
+        self._binary = binary
+        self._model = model
+        self._cwd = state_home()  # neutral cwd: no project AGENTS.md leaks into prompts
+        self._cwd.mkdir(parents=True, exist_ok=True)
+
+    def complete(self, *, system: str, user: str) -> str:
+        out_path = self._cwd / f".codex-last-message-{os.getpid()}.txt"
+        argv = [
+            self._binary,
+            "exec",
+            f"{system}\n\n{user}",  # codex exec has no separate system-prompt flag
+            "--sandbox",
+            "read-only",
+            "--skip-git-repo-check",
+            "--ephemeral",
+            "--output-last-message",
+            str(out_path),
+        ]
+        if self._model != "default":
+            argv += ["-m", self._model]
+        try:
+            proc = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+                cwd=self._cwd,
+                env=_nested_cli_env(),
+            )
+            if proc.returncode != 0:
+                detail = (proc.stderr or proc.stdout).strip()[:300]
+                raise RuntimeError(f"codex CLI failed (exit {proc.returncode}): {detail}")
+            if not out_path.exists():
+                raise RuntimeError("codex CLI produced no output message")
+            return out_path.read_text()
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"codex CLI timed out after {self.timeout_seconds:.0f}s") from exc
+        finally:
+            out_path.unlink(missing_ok=True)
+
+
 def make_provider(provider: str, model: str) -> Provider:
     """Build a provider; for key-based providers the env var is checked first."""
     if provider not in DEFAULT_MODELS:
         raise ValueError(
-            f"unknown provider {provider!r}: expected 'claude', 'claudecode' or 'openai'"
+            f"unknown provider {provider!r}: expected 'claude', 'claudecode', "
+            "'codexcli' or 'openai'"
         )
     if provider == "claudecode":
         return ClaudeCodeProvider(model)
+    if provider == "codexcli":
+        return CodexCliProvider(model)
     env_var = KEY_ENV_VARS[provider]
     api_key = os.environ.get(env_var)
     if not api_key:

@@ -41,6 +41,7 @@ uv sync --extra openai
 |---|---|---|
 | `claude` (default) | `ANTHROPIC_API_KEY` | Anthropic API, billed per token |
 | `claudecode` | your existing Claude Code login | runs `claude -p` headless on your Pro/Max **subscription** — no API credits. Requires Claude Code installed & signed in. Personal use only: Anthropic [does not allow](https://code.claude.com/docs/en/agent-sdk/overview) shipping products on claude.ai login, and any `ANTHROPIC_API_KEY` in the env is withheld from the subprocess so it can never bill the API |
+| `codexcli` | your existing Codex CLI login | runs `codex exec` (sandboxed read-only) on your ChatGPT **subscription** — no API credits. Requires the Codex CLI installed & signed in; same personal-use posture and API-key withholding as `claudecode` |
 | `openai` | `OPENAI_API_KEY` | needs `uv sync --extra openai` |
 
 Other variables: `NAMEHUNT_PROVIDER` picks the default provider when `--provider` is
