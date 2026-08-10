@@ -15,10 +15,18 @@ A local CLI that runs a **closed feedback loop** for naming a company:
 
 ## Install
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+The fifteen-second way (requires [uv](https://docs.astral.sh/uv/)):
 
 ```bash
-uv sync
+uvx namehunt run --brief brief.md --provider claudecode
+```
+
+Or install it properly: `uv tool install namehunt` (also: `pipx install namehunt`).
+
+From source (Python 3.11+):
+
+```bash
+git clone https://github.com/Tarabcak/namehunt && cd namehunt && uv sync
 ```
 
 Optional OpenAI support:
