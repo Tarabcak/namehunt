@@ -2,13 +2,32 @@
 name = "namehunt"
 version = "0.1.0"
 description = "Closed-loop startup naming: LLM candidates checked against real RDAP domain availability"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Róbert Tarabčák" },
+    { name = "Norbert Ďurčanský" },
+]
+keywords = ["naming", "domains", "rdap", "startup", "llm", "claude", "cli"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Topic :: Utilities",
+]
 requires-python = ">=3.11"
+
 dependencies = [
     "anthropic>=0.121.0",
     "httpx>=0.28.1",
     "rich>=15.0.0",
     "whoisit>=4.0.4",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Tarabcak/namehunt"
 
 [project.scripts]
 namehunt = "namehunt.cli:main"

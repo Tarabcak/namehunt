@@ -1,5 +1,11 @@
 # namehunt
 
+**Name your company with a closed feedback loop — and run it on your Claude
+subscription, no API key needed.** We built namehunt to rename our own startup:
+8 rounds, 210 live-checked names, one winner. Every "AI name generator" hands
+you names that turn out to be taken; namehunt checks real availability via RDAP
+*inside the loop*, so every round learns from what's actually free.
+
 A local CLI that runs a **closed feedback loop** for naming a company:
 
 1. An LLM (Claude by default, OpenAI optional) generates candidate name stems from your brief.
@@ -80,3 +86,17 @@ uv run pytest -q            # all network mocked; suite blocks real sockets
 uv run ruff check .
 uv run mypy src
 ```
+
+## How it was built
+
+Spec-first, strict TDD, by Claude Code: the full product spec, the workflow
+rules, and the hooks that enforced red→green live in this repo as artifacts —
+see [namehunt-SPEC.md](namehunt-SPEC.md) and [CLAUDE.md](CLAUDE.md). The test
+suite hard-blocks real network access, and every RDAP failure path is proven
+to map to `unknown`, never `available`.
+
+---
+
+*namehunt was built in one weekend to rename our own startup (story coming
+soon). If your agents write code in one repo, ask us what happens to the other
+forty. — Róbert & Norbert*
