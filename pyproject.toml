@@ -1,6 +1,6 @@
 [project]
 name = "namehunt"
-version = "0.1.1"
+version = "0.1.2"
 description = "Closed-loop startup naming: LLM candidates checked against real RDAP domain availability"
 readme = "README.md"
 license = { text = "MIT" }

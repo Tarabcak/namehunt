@@ -1,105 +1,94 @@
 # namehunt
 
-**Name your company with a closed feedback loop — and run it on your Claude
-subscription, no API key needed.** We built namehunt to rename our own startup:
-8 rounds, 210 live-checked names, one winner. Every "AI name generator" hands
-you names that turn out to be taken; namehunt checks real availability via RDAP
-*inside the loop*, so every round learns from what's actually free.
-
-A local CLI that runs a **closed feedback loop** for naming a company:
-
-1. An LLM (Claude by default, OpenAI optional) generates candidate name stems from your brief.
-2. Real domain availability is checked for each stem across your TLDs via **RDAP** (free, keyless, authoritative).
-3. Results — plus your likes/dislikes/notes — feed straight back into the next generation round.
-4. Repeat until you have a shortlist of names whose domains are actually available.
-
-## Install
-
-The fifteen-second way (requires [uv](https://docs.astral.sh/uv/)):
-
-```bash
-uvx namehunt run --brief brief.md --provider claudecode
-```
-
-Or install it properly: `uv tool install namehunt` (also: `pipx install namehunt`).
-
-From source (Python 3.11+):
-
-```bash
-git clone https://github.com/Tarabcak/namehunt && cd namehunt && uv sync
-```
-
-Optional OpenAI support:
-
-```bash
-uv sync --extra openai
-```
-
-## Providers & environment variables
-
-| Provider | Auth | Notes |
-|---|---|---|
-| `claude` (default) | `ANTHROPIC_API_KEY` | Anthropic API, billed per token |
-| `claudecode` | your existing Claude Code login | runs `claude -p` headless on your Pro/Max **subscription** — no API credits. Requires Claude Code installed & signed in. Personal use only: Anthropic [does not allow](https://code.claude.com/docs/en/agent-sdk/overview) shipping products on claude.ai login, and any `ANTHROPIC_API_KEY` in the env is withheld from the subprocess so it can never bill the API |
-| `codexcli` | your existing Codex CLI login | runs `codex exec` (sandboxed read-only) on your ChatGPT **subscription** — no API credits. Requires the Codex CLI installed & signed in; same personal-use posture and API-key withholding as `claudecode` |
-| `openai` | `OPENAI_API_KEY` | needs `uv sync --extra openai` |
-
-Other variables: `NAMEHUNT_PROVIDER` picks the default provider when `--provider` is
-omitted; `NAMEHUNT_HOME` overrides the state directory (default `~/.namehunt` —
-sessions + RDAP bootstrap cache). Keys are read from the environment only and are
-never written to disk.
-
-```bash
-# subscription-powered, no API key needed:
-uv run namehunt run --brief examples/brief.md --provider claudecode
-```
-
-## 60-second quickstart
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-uv run namehunt run --brief examples/brief.md --tlds com,ai --session myco
-```
-
-Each round prints a table — ✅ available, ❌ taken, ❓ unknown — then prompts:
+Naming a company usually goes: generate names, check domains, find everything
+taken, start over. namehunt closes that loop in one CLI — an LLM proposes
+names from your brief, RDAP checks live availability on your TLDs, and the
+results plus your feedback steer the next round.
 
 ```
+$ namehunt run --brief brief.md --tlds com,ai
+
+ round 2 — 20 new candidates
+┏━━━┳━━━━━━━━━┳━━━━━━┳━━━━━┓
+┃ # ┃ name    ┃ .com ┃ .ai ┃
+┡━━━╇━━━━━━━━━╇━━━━━━╇━━━━━┩
+│ 1 │ vesper  │  ❌  │ ❌  │
+│ 2 │ corvid  │  ❌  │ ❌  │
+│ 3 │ prescry │  ✅  │ ✅  │
+└───┴─────────┴──────┴─────┘
 [a]nother round  [l]ike <numbers>  [d]islike <numbers>  [n]ote <text>  [q]uit & export
 ```
 
-- `l 2 5` / `d 3` — like/dislike rows from the table (steers the next round)
-- `n shorter, more mythic` — free-text steering note
-- `a` — next round; `q` — quit
-- `--rounds 3` runs three rounds autonomously (no prompts); `--debug` prints the full LLM prompt
+Works with an Anthropic or OpenAI API key — or with no key at all, using your
+existing Claude Code or Codex CLI login.
 
-Ctrl-C is safe at any point — the session is saved, then:
+## Quickstart
+
+Needs [uv](https://docs.astral.sh/uv/). Write a few lines about your project,
+then run:
 
 ```bash
-uv run namehunt resume --session myco
-uv run namehunt export --session myco --format md   # also: csv, json
+printf 'CLI that turns messy CSVs into typed parquet.\nFor data engineers. Vibe: short, unix-y.\n' > brief.md
+uvx namehunt run --brief brief.md --provider claudecode --tlds com,ai
 ```
 
-## The RDAP caveat
+(No Claude Code? Use `--provider claude` with `ANTHROPIC_API_KEY` exported.)
 
-> ⚠️ RDAP 'available' is a strong signal, not a guarantee — premium/reserved names can
-> still be unregisterable. Re-check at your registrar before buying, and run a
-> trademark search.
+Each round prints the table, then asks for feedback:
 
-`unknown` (❓) means the check failed (timeout, rate limit, TLD without RDAP…) — namehunt
-**never** reports a domain as available unless RDAP itself said so.
+- `l 2 5` / `d 3` — like / dislike rows, steers the next round
+- `n shorter, more mythic` — free-text steering note
+- `a` — another round, `q` — quit
+
+Ctrl-C is always safe; state is saved after every round.
+
+```bash
+uvx namehunt resume --session default               # pick up where you left off
+uvx namehunt export --session default --format md   # or csv, json
+```
+
+Useful flags: `--batch 20` names per round, `--rounds 3` to run unattended,
+`--style "short, mythic"`, `--session <name>` for parallel hunts, `--debug` to
+print the outgoing LLM prompt. Permanent install: `uv tool install namehunt`.
+
+## Providers
+
+| `--provider` | Needs | Billing |
+|---|---|---|
+| `claudecode` | Claude Code installed + signed in | your Claude subscription |
+| `codexcli` | Codex CLI installed + signed in | your ChatGPT subscription |
+| `claude` (default) | `ANTHROPIC_API_KEY` | Anthropic API, per token |
+| `openai` | `OPENAI_API_KEY`, `uv sync --extra openai` | OpenAI API, per token |
+
+The CLI providers run `claude -p` / `codex exec` (sandboxed read-only) as
+subprocesses and strip API keys from their environment, so they can never
+silently bill an API. Subscription login is for personal use — don't ship a
+product on it ([Anthropic's policy](https://code.claude.com/docs/en/agent-sdk/overview)).
+
+`NAMEHUNT_PROVIDER` sets the default provider; `NAMEHUNT_HOME` moves the state
+dir (default `~/.namehunt`). Keys are read from the environment and never
+written to disk.
+
+## How availability works
+
+- ✅ available — the registry's RDAP says the domain doesn't exist
+- ❌ taken — RDAP returned a registration
+- ❓ unknown — the check failed (timeout, rate limit, or a TLD without RDAP,
+  like `.io`). Never treated as available.
+
+RDAP "available" is a strong signal, not a guarantee: premium and reserved
+names can still be unregisterable. Re-check at your registrar and run a
+trademark search before you fall in love.
 
 ## Development
 
 ```bash
-uv run pytest -q            # all network mocked; suite blocks real sockets
-uv run ruff check .
-uv run mypy src
+git clone https://github.com/Tarabcak/namehunt && cd namehunt && uv sync
+uv run pytest -q                     # all network mocked; suite blocks real sockets
+uv run ruff check . && uv run mypy src
 ```
 
-## How it was built
-
-Spec-first, strict TDD, by Claude Code: the full product spec, the workflow
-rules, and the hooks that enforced red→green live in this repo as artifacts —
-see [namehunt-SPEC.md](namehunt-SPEC.md) and [CLAUDE.md](CLAUDE.md). The test
-suite hard-blocks real network access, and every RDAP failure path is proven
-to map to `unknown`, never `available`.
+Built spec-first with strict TDD by Claude Code; the spec, workflow rules and
+hooks are in the repo ([namehunt-SPEC.md](namehunt-SPEC.md),
+[CLAUDE.md](CLAUDE.md)). Every RDAP failure path is tested to map to
+`unknown`, never `available`.
