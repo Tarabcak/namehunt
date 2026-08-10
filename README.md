@@ -102,10 +102,3 @@ rules, and the hooks that enforced red→green live in this repo as artifacts �
 see [namehunt-SPEC.md](namehunt-SPEC.md) and [CLAUDE.md](CLAUDE.md). The test
 suite hard-blocks real network access, and every RDAP failure path is proven
 to map to `unknown`, never `available`.
-
----
-
-*namehunt was built in one weekend to rename our own startup — it's called
-**prescry** now (prescry.com), the cross-repo impact layer for AI coding
-agents: your agents write code in one repo, prescry makes sure it doesn't
-break the other forty. Story coming soon. — Róbert & Norbert*
