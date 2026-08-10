@@ -29,7 +29,7 @@ from namehunt.llm import (
 from namehunt.session import RoundRecord, Session, load_session, save_session, session_path
 
 STATUS_ICONS = {"available": "✅", "taken": "❌", "unknown": "❓"}
-DEFAULT_TLDS = "com,ai,io"
+DEFAULT_TLDS = "com,ai"  # .io dropped from defaults: its registry publishes no RDAP endpoint
 PROMPT = "[a]nother round  [l]ike <numbers>  [d]islike <numbers>  [n]ote <text>  [q]uit & export"
 _TLD_RE = re.compile(r"[a-z0-9-]{2,63}\Z")
 
