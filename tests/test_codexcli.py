@@ -120,3 +120,43 @@ def test_complete_timeout_raises_clean_error(monkeypatch, codex_present):
     provider = make_provider("codexcli", DEFAULT_MODELS["codexcli"])
     with pytest.raises(RuntimeError, match="timed out"):
         provider.complete(system="s", user="u")
+
+
+def test_explicit_codex_binary_override(monkeypatch, codex_present):
+    monkeypatch.setenv("NAMEHUNT_CODEX_BIN", "/native/bin/codex")
+    monkeypatch.setattr(llm.shutil, "which", lambda name: name)
+    fake_run, calls = _fake_run_writing('["oak"]')
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    make_provider("codexcli", "default").complete(system="s", user="u")
+    assert calls["argv"][0] == "/native/bin/codex"
+
+
+def test_codex_uses_unique_output_files_and_structured_schema(monkeypatch, codex_present):
+    paths = []
+
+    def fake_run(argv, **kwargs):
+        import json
+        output = Path(argv[argv.index("--output-last-message") + 1])
+        paths.append(output)
+        schema = json.loads(Path(argv[argv.index("--output-schema") + 1]).read_text())
+        assert schema["required"] == ["names"]
+        assert schema["properties"]["names"]["type"] == "array"
+        assert "model_reasoning_effort=\"low\"" in argv
+        assert "CODEX_API_KEY" not in kwargs["env"]
+        output.write_text('{"names": ["oak"]}')
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setenv("CODEX_API_KEY", "must-not-bill")
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    provider = make_provider("codexcli", "default")
+    provider.complete(system="s", user="u")
+    provider.complete(system="s", user="u")
+    assert paths[0] != paths[1]
+    assert all(not p.exists() for p in paths)
+
+
+def test_empty_output_is_an_actionable_failure(monkeypatch, codex_present):
+    fake_run, _ = _fake_run_writing("   \n")
+    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    with pytest.raises(RuntimeError, match="empty output"):
+        make_provider("codexcli", "default").complete(system="s", user="u")
