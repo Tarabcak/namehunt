@@ -136,12 +136,13 @@ def test_codex_uses_unique_output_files_and_structured_schema(monkeypatch, codex
 
     def fake_run(argv, **kwargs):
         import json
+
         output = Path(argv[argv.index("--output-last-message") + 1])
         paths.append(output)
         schema = json.loads(Path(argv[argv.index("--output-schema") + 1]).read_text())
         assert schema["required"] == ["names"]
         assert schema["properties"]["names"]["type"] == "array"
-        assert "model_reasoning_effort=\"low\"" in argv
+        assert 'model_reasoning_effort="low"' in argv
         assert "CODEX_API_KEY" not in kwargs["env"]
         output.write_text('{"names": ["oak"]}')
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")

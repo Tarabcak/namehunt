@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 from collections.abc import Callable, Sequence
@@ -16,7 +17,14 @@ from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
-from namehunt.availability import DomainCheck, check_domains, doh_prefilter
+from namehunt.availability import (
+    DEFAULT_MAX_IN_FLIGHT,
+    DEFAULT_MAX_PER_SEC,
+    DomainCheck,
+    RateLimiter,
+    check_domains,
+    doh_prefilter,
+)
 from namehunt.export import CAVEAT, render_export
 from namehunt.llm import (
     DEFAULT_MODELS,
@@ -111,7 +119,14 @@ def _cmd_run(args: argparse.Namespace, console: Console, errors: Console) -> int
         )
     brief_text = Path(sess.brief_path).read_text().strip()
     provider = make_provider(provider_name, model)
-    return _loop(sess, brief_text, provider, _build_checker(args.fast_prefilter), args, console)
+    return _loop(
+        sess,
+        brief_text,
+        provider,
+        _build_checker(args.fast_prefilter, args.rdap_rps, args.rdap_concurrency),
+        args,
+        console,
+    )
 
 
 def _cmd_resume(args: argparse.Namespace, console: Console, errors: Console) -> int:
@@ -126,7 +141,14 @@ def _cmd_resume(args: argparse.Namespace, console: Console, errors: Console) -> 
     brief_text = Path(sess.brief_path).read_text().strip()
     provider = make_provider(sess.provider, sess.model)
     console.print(f"resuming session [bold]{sess.name}[/] ({len(sess.rounds)} rounds so far)")
-    return _loop(sess, brief_text, provider, _build_checker(args.fast_prefilter), args, console)
+    return _loop(
+        sess,
+        brief_text,
+        provider,
+        _build_checker(args.fast_prefilter, args.rdap_rps, args.rdap_concurrency),
+        args,
+        console,
+    )
 
 
 def _cmd_export(args: argparse.Namespace, console: Console) -> int:
@@ -246,11 +268,16 @@ def _render_round(console: Console, sess: Session) -> None:
     console.print("[dim]✅ available   ❌ taken   ❓ unknown (unresolved, never 'available')[/]")
 
 
-def _build_checker(fast_prefilter: bool) -> Checker:
+def _build_checker(
+    fast_prefilter: bool,
+    rdap_rps: float = DEFAULT_MAX_PER_SEC,
+    rdap_concurrency: int = DEFAULT_MAX_IN_FLIGHT,
+) -> Checker:
+    checker = partial(check_domains, limiter=RateLimiter(rdap_rps), max_in_flight=rdap_concurrency)
     if not fast_prefilter:
-        return check_domains
+        return checker
     client = httpx.Client(timeout=5.0)
-    return partial(check_domains, prefilter=partial(doh_prefilter, client=client))
+    return partial(checker, prefilter=partial(doh_prefilter, client=client))
 
 
 def _parse_tlds(raw: str) -> list[str]:
@@ -264,6 +291,10 @@ def _parse_tlds(raw: str) -> list[str]:
 
 
 def _validate_counts(args: argparse.Namespace) -> None:
+    if not math.isfinite(args.rdap_rps) or args.rdap_rps <= 0:
+        raise ValueError("--rdap-rps must be finite and positive")
+    if args.rdap_concurrency < 1:
+        raise ValueError("--rdap-concurrency must be at least 1")
     if args.batch < 1:
         raise ValueError("--batch must be at least 1")
     if args.rounds < 0:
@@ -279,6 +310,15 @@ def _build_parser() -> argparse.ArgumentParser:
     loop_flags.add_argument("--batch", type=int, default=20, help="names per round (default 20)")
     loop_flags.add_argument("--rounds", type=int, default=0, help="0 = interactive; N autonomous")
     loop_flags.add_argument("--fast-prefilter", action="store_true", help="DoH pre-filter first")
+    loop_flags.add_argument(
+        "--rdap-rps", type=float, default=DEFAULT_MAX_PER_SEC, help="maximum RDAP requests/second"
+    )
+    loop_flags.add_argument(
+        "--rdap-concurrency",
+        type=int,
+        default=DEFAULT_MAX_IN_FLIGHT,
+        help="maximum concurrent RDAP checks",
+    )
     loop_flags.add_argument("--debug", action="store_true", help="print the outgoing LLM prompt")
 
     run = sub.add_parser("run", parents=[loop_flags], help="start (or continue) a session")
