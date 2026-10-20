@@ -69,6 +69,42 @@ product on it ([Anthropic's policy](https://code.claude.com/docs/en/agent-sdk/ov
 dir (default `~/.namehunt`). Keys are read from the environment and never
 written to disk.
 
+### Codex CLI
+
+```bash
+uvx namehunt run --brief brief.md --provider codexcli --tlds cz
+```
+
+Uses the CLI's configured model, or the explicit `--model` override, with low
+reasoning effort and a JSON output schema. Temporary schema/output files are
+isolated per invocation and removed on success or failure. The read-only
+filesystem sandbox does not disable every Codex tool.
+
+If the CLI fails before generating names, check `codex --version` and
+`codex login status`. For a broken PATH entry (for example an npm launcher with
+a broken Node installation), select a working installed executable explicitly:
+
+```bash
+NAMEHUNT_CODEX_BIN=/absolute/path/to/codex uvx namehunt run \
+  --brief brief.md --provider codexcli --tlds cz
+```
+
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `CODEX_API_KEY` are omitted from nested
+CLI environments. The selected CLI still uses its own saved login/configuration.
+
+### Registry pacing
+
+Some registries reject the default four checks per second. Lower the rate and
+concurrency on either `run` or `resume`:
+
+```bash
+uvx namehunt run --brief brief.md --provider codexcli --tlds cz \
+  --rdap-rps 0.4 --rdap-concurrency 1
+```
+
+These are invocation options; supply them again when resuming. HTTP failures
+remain unknown, never available. Slower pacing does not guarantee registry uptime.
+
 ## How availability works
 
 - ✅ available — the registry's RDAP says the domain doesn't exist

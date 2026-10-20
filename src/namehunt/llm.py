@@ -10,8 +10,10 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 import anthropic
@@ -180,7 +182,7 @@ def _nested_cli_env() -> dict[str, str]:
     prefixes = ("CLAUDE_CODE_", "CLAUDE_EFFORT", "CLAUDE_PID", "CLAUDE_AGENT_", "CLAUDE_PREVIEW_")
     env: dict[str, str] = {}
     for key, value in os.environ.items():
-        if key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+        if key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CODEX_API_KEY"):
             continue
         if key != "CLAUDE_CODE_OAUTH_TOKEN" and (key == "CLAUDECODE" or key.startswith(prefixes)):
             continue
@@ -193,14 +195,14 @@ class CodexCliProvider:
 
     Same personal-use posture as ClaudeCodeProvider: no API key involved, and
     OPENAI_API_KEY is withheld from the subprocess so calls never bill the API.
-    Runs sandboxed read-only, so generation can never execute anything.
+    Runs with a read-only filesystem sandbox; this does not disable all tools.
     """
 
     name = "codexcli"
     timeout_seconds = 480.0
 
     def __init__(self, model: str) -> None:
-        binary = shutil.which("codex")
+        binary = shutil.which(os.environ.get("NAMEHUNT_CODEX_BIN") or "codex")
         if binary is None:
             raise ValueError(
                 "codex CLI not found for provider 'codexcli' - install Codex and sign in, "
@@ -212,15 +214,34 @@ class CodexCliProvider:
         self._cwd.mkdir(parents=True, exist_ok=True)
 
     def complete(self, *, system: str, user: str) -> str:
-        out_path = self._cwd / f".codex-last-message-{os.getpid()}.txt"
+        with tempfile.TemporaryDirectory(prefix=".codex-", dir=self._cwd) as directory:
+            return self._complete_in(Path(directory), system=system, user=user)
+
+    def _complete_in(self, directory: Path, *, system: str, user: str) -> str:
+        out_path = directory / "result.txt"
+        schema_path = directory / "schema.json"
+        schema_path.write_text(
+            json.dumps(
+                {
+                    "type": "object",
+                    "properties": {"names": {"type": "array", "items": {"type": "string"}}},
+                    "required": ["names"],
+                    "additionalProperties": False,
+                }
+            )
+        )
         argv = [
             self._binary,
             "exec",
-            f"{system}\n\n{user}",  # codex exec has no separate system-prompt flag
+            f'{system}\n\n{user}\n\nReturn the names in the schema object: {{"names": [...]}}.',
             "--sandbox",
             "read-only",
             "--skip-git-repo-check",
             "--ephemeral",
+            "-c",
+            'model_reasoning_effort="low"',
+            "--output-schema",
+            str(schema_path),
             "--output-last-message",
             str(out_path),
         ]
@@ -235,16 +256,25 @@ class CodexCliProvider:
                 cwd=self._cwd,
                 env=_nested_cli_env(),
             )
-            if proc.returncode != 0:
-                detail = (proc.stderr or proc.stdout).strip()[:300]
-                raise RuntimeError(f"codex CLI failed (exit {proc.returncode}): {detail}")
-            if not out_path.exists():
-                raise RuntimeError("codex CLI produced no output message")
-            return out_path.read_text()
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f"codex CLI timed out after {self.timeout_seconds:.0f}s") from exc
-        finally:
-            out_path.unlink(missing_ok=True)
+        except OSError as exc:
+            raise RuntimeError(
+                "Could not start codex; check NAMEHUNT_CODEX_BIN and your CLI installation"
+            ) from exc
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout).strip()[-800:]
+            raise RuntimeError(
+                f"codex CLI failed (exit {proc.returncode}): {detail}. "
+                "Check `codex --version` and `codex login status`; "
+                "NAMEHUNT_CODEX_BIN can select a working executable."
+            )
+        if not out_path.exists():
+            raise RuntimeError("codex CLI produced no output message")
+        result = out_path.read_text()
+        if not result.strip():
+            raise RuntimeError("codex CLI returned empty output; check CLI login and model access")
+        return result
 
 
 def make_provider(provider: str, model: str) -> Provider:

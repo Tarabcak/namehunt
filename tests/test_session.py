@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 import pytest
+
 from namehunt.llm import context_from_session
 from namehunt.session import RoundRecord, Session, load_session, save_session, session_path
 

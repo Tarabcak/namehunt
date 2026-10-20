@@ -16,13 +16,6 @@ import time
 import httpx
 import pytest
 import requests
-from namehunt.availability import (
-    Availability,
-    RateLimiter,
-    check_domain,
-    check_domains,
-    doh_prefilter,
-)
 from whoisit.errors import (
     BootstrapError,
     ParseError,
@@ -33,6 +26,13 @@ from whoisit.errors import (
 )
 
 from namehunt import availability
+from namehunt.availability import (
+    Availability,
+    RateLimiter,
+    check_domain,
+    check_domains,
+    doh_prefilter,
+)
 
 
 class FakeClock:
