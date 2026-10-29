@@ -51,6 +51,16 @@ Useful flags: `--batch 20` names per round, `--rounds 3` to run unattended,
 `--style "short, mythic"`, `--session <name>` for parallel hunts, `--debug` to
 print the outgoing LLM prompt. Permanent install: `uv tool install namehunt`.
 
+`--require-tlds com` makes a name count only when its .com is free. Without it,
+any free TLD counts as a win, so a TLD that is almost always free (such as
+.design) hides that the .com is gone. Required TLDs steer the next rounds and
+go first in the export; `--require-tlds none` clears them.
+
+Running `run` again with the same `--session` continues that session with its
+saved provider, model, style and TLDs. Pass `--provider`, `--model`, `--style`
+or `--require-tlds` to change them for the rest of the session, `resume`
+included. Different `--tlds` need a new session.
+
 ## Providers
 
 | `--provider` | Needs | Billing |
@@ -95,7 +105,7 @@ CLI environments. The selected CLI still uses its own saved login/configuration.
 ### Registry pacing
 
 Some registries reject the default four checks per second. Lower the rate and
-concurrency on either `run` or `resume`:
+concurrency on either `run` or `resume` (0.2.0 and later):
 
 ```bash
 uvx namehunt run --brief brief.md --provider codexcli --tlds cz \
