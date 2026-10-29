@@ -11,7 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -155,7 +155,7 @@ class ClaudeCodeProvider:
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f"claude CLI timed out after {self.timeout_seconds:.0f}s") from exc
         if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout).strip()[:300]
+            detail = _error_tail(proc.stderr or proc.stdout)
             raise RuntimeError(f"claude CLI failed (exit {proc.returncode}): {detail}")
         try:
             data = json.loads(proc.stdout)
@@ -168,6 +168,11 @@ class ClaudeCodeProvider:
         if not isinstance(result, str):
             raise RuntimeError("claude CLI returned no result text")
         return result
+
+
+def _error_tail(output: str, limit: int = 800) -> str:
+    """The end of a CLI's error output: the actual error comes after its start-up banner."""
+    return output.strip()[-limit:]
 
 
 def _nested_cli_env() -> dict[str, str]:
@@ -263,7 +268,7 @@ class CodexCliProvider:
                 "Could not start codex; check NAMEHUNT_CODEX_BIN and your CLI installation"
             ) from exc
         if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout).strip()[-800:]
+            detail = _error_tail(proc.stderr or proc.stdout)
             raise RuntimeError(
                 f"codex CLI failed (exit {proc.returncode}): {detail}. "
                 "Check `codex --version` and `codex login status`; "
@@ -308,6 +313,7 @@ class RoundContext:
     dislikes: list[str]
     notes: list[str]
     all_generated: frozenset[str]  # cumulative; dedupe survives resume
+    required_tlds: tuple[str, ...] = ()  # a stem only wins when all of these are AVAILABLE
 
 
 @dataclass(frozen=True)
@@ -354,9 +360,15 @@ def parse_names(raw: str) -> ParsedNames:
     return ParsedNames(valid, dropped, len(entries))
 
 
-def summarize_results(results: Mapping[str, str]) -> tuple[list[str], list[str]]:
+def summarize_results(
+    results: Mapping[str, str], required_tlds: Sequence[str] = ()
+) -> tuple[list[str], list[str]]:
     """Return (available full domains, fully-failed taken stems). UNKNOWN feeds
-    neither list; a stem with any AVAILABLE domain is a win, not a taken stem."""
+    neither list; a stem with any AVAILABLE domain is a win, not a taken stem.
+    With required TLDs a stem only wins when every one of them is AVAILABLE, and a
+    TAKEN required TLD makes it a taken stem even if other TLDs are free."""
+    if required_tlds:
+        return _summarize_required(results, required_tlds)
     available = sorted(d for d, s in results.items() if s == Availability.AVAILABLE.value)
     winner_stems = {d.split(".", 1)[0] for d in available}
     taken = sorted(
@@ -369,12 +381,34 @@ def summarize_results(results: Mapping[str, str]) -> tuple[list[str], list[str]]
     return available, taken
 
 
+def _summarize_required(
+    results: Mapping[str, str], required_tlds: Sequence[str]
+) -> tuple[list[str], list[str]]:
+    stems = {d.split(".", 1)[0] for d in results}
+    winners = {
+        stem
+        for stem in stems
+        if all(results.get(f"{stem}.{t}") == Availability.AVAILABLE.value for t in required_tlds)
+    }
+    available = sorted(
+        d
+        for d, s in results.items()
+        if s == Availability.AVAILABLE.value and d.split(".", 1)[0] in winners
+    )
+    taken = sorted(
+        stem
+        for stem in stems
+        if any(results.get(f"{stem}.{t}") == Availability.TAKEN.value for t in required_tlds)
+    )
+    return available, taken
+
+
 def context_from_session(sess: Session, brief_text: str, batch: int) -> RoundContext:
     """Rebuild the exact loop context from persisted state (used by resume too)."""
     merged: dict[str, str] = {}
     for record in sess.rounds:
         merged.update(record.results)
-    available, taken = summarize_results(merged)
+    available, taken = summarize_results(merged, sess.required_tlds)
     return RoundContext(
         brief=brief_text,
         style=sess.style,
@@ -385,6 +419,7 @@ def context_from_session(sess: Session, brief_text: str, batch: int) -> RoundCon
         dislikes=list(sess.dislikes),
         notes=list(sess.notes),
         all_generated=frozenset(sess.all_generated),
+        required_tlds=tuple(sess.required_tlds),
     )
 
 
@@ -393,6 +428,14 @@ def build_messages(ctx: RoundContext) -> tuple[str, str]:
     lines = ["PROJECT BRIEF:", ctx.brief, ""]
     if ctx.style:
         lines += [f"STYLE DIRECTION: {ctx.style}", ""]
+    if ctx.required_tlds:
+        required = ", ".join(f".{t}" for t in ctx.required_tlds)
+        lines += [
+            f"REQUIRED DOMAINS: a name only counts when {required} "
+            f"{'is' if len(ctx.required_tlds) == 1 else 'are'} available. Names with a "
+            "required domain taken are listed as taken below.",
+            "",
+        ]
     lines.append("AVAILABLE DOMAINS (verified available - favor the patterns of these winners):")
     lines += [f"- {d}" for d in ctx.available_domains] or ["(none yet)"]
     lines.append("")
