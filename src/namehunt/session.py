@@ -41,6 +41,7 @@ class Session:
     dislikes: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     all_generated: set[str] = field(default_factory=set)
+    required_tlds: list[str] = field(default_factory=list)  # a name only wins with all of these
 
 
 def session_path(name: str, base: Path | None = None) -> Path:
@@ -85,6 +86,7 @@ def load_session(name: str, base: Path | None = None) -> Session:
             dislikes=[str(x) for x in data["dislikes"]],
             notes=[str(x) for x in data["notes"]],
             all_generated={str(x) for x in data["all_generated"]},
+            required_tlds=[str(t) for t in data.get("required_tlds", [])],  # absent before 0.2
         )
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"corrupt session file: {path}") from exc

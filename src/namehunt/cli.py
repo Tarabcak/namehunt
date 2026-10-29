@@ -91,34 +91,16 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_run(args: argparse.Namespace, console: Console, errors: Console) -> int:
-    tlds = _parse_tlds(args.tlds)
     _validate_counts(args)
-    provider_name = args.provider or os.environ.get("NAMEHUNT_PROVIDER") or "claude"
-    if provider_name not in DEFAULT_MODELS:
-        raise ValueError(
-            f"unknown provider {provider_name!r}: expected 'claude', 'claudecode', "
-            "'codexcli' or 'openai'"
-        )
-    model = args.model or DEFAULT_MODELS[provider_name]
     if session_path(args.session).exists():
-        sess = load_session(args.session)
-        if args.brief:
-            sess = replace(sess, brief_path=args.brief)
-        console.print(f"continuing session [bold]{sess.name}[/] ({len(sess.rounds)} rounds so far)")
+        sess = _continue_session(load_session(args.session), args, console)
     else:
         if not args.brief:
             errors.print("error: --brief is required on the first run of a session")
             return 2
-        sess = Session(
-            name=args.session,
-            brief_path=args.brief,
-            style=args.style,
-            tlds=tlds,
-            provider=provider_name,
-            model=model,
-        )
+        sess = _new_session(args)
     brief_text = Path(sess.brief_path).read_text().strip()
-    provider = make_provider(provider_name, model)
+    provider = make_provider(sess.provider, sess.model)
     return _loop(
         sess,
         brief_text,
@@ -129,11 +111,77 @@ def _cmd_run(args: argparse.Namespace, console: Console, errors: Console) -> int
     )
 
 
+def _new_session(args: argparse.Namespace) -> Session:
+    tlds = _parse_tlds(args.tlds or DEFAULT_TLDS)
+    provider_name = _check_provider(
+        args.provider or os.environ.get("NAMEHUNT_PROVIDER") or "claude"
+    )
+    return Session(
+        name=args.session,
+        brief_path=args.brief,
+        style=args.style,
+        tlds=tlds,
+        provider=provider_name,
+        model=args.model or DEFAULT_MODELS[provider_name],
+        required_tlds=_parse_required_tlds(args.require_tlds, tlds),
+    )
+
+
+def _continue_session(sess: Session, args: argparse.Namespace, console: Console) -> Session:
+    """Spec §1.4: keep the session's own settings; flags given explicitly replace them."""
+    if args.tlds is not None and _parse_tlds(args.tlds) != sess.tlds:
+        raise ValueError(
+            f"session {sess.name!r} checks {','.join(sess.tlds)} - "
+            "start a new session to change TLDs"
+        )
+    provider, model = sess.provider, sess.model
+    if args.provider and args.provider != sess.provider:
+        provider = _check_provider(args.provider)
+        model = DEFAULT_MODELS[provider]
+    updated = replace(
+        sess,
+        brief_path=args.brief or sess.brief_path,
+        style=sess.style if args.style is None else args.style,
+        provider=provider,
+        model=args.model or model,
+        required_tlds=(
+            sess.required_tlds
+            if args.require_tlds is None
+            else _parse_required_tlds(args.require_tlds, sess.tlds)
+        ),
+    )
+    console.print(f"continuing session [bold]{sess.name}[/] ({len(sess.rounds)} rounds so far)")
+    if (updated.provider, updated.model) != (sess.provider, sess.model):
+        console.print(f"now using {updated.provider} ({escape(updated.model)}) for this session")
+    return updated
+
+
+def _check_provider(name: str) -> str:
+    if name not in DEFAULT_MODELS:
+        raise ValueError(
+            f"unknown provider {name!r}: expected 'claude', 'claudecode', 'codexcli' or 'openai'"
+        )
+    return name
+
+
+def _parse_required_tlds(raw: str | None, tlds: list[str]) -> list[str]:
+    """--require-tlds: a subset of the session TLDs; 'none' clears it."""
+    if raw is None or raw.strip().lower() == "none":
+        return []
+    required = _parse_tlds(raw)
+    missing = [t for t in required if t not in tlds]
+    if missing:
+        raise ValueError(
+            f"--require-tlds {','.join(missing)} is not among the session TLDs ({','.join(tlds)})"
+        )
+    return required
+
+
 def _cmd_resume(args: argparse.Namespace, console: Console, errors: Console) -> int:
     if not session_path(args.session).exists():
         errors.print(
             f"error: no session named {args.session!r} - start one with: "
-            f"uv run namehunt run --brief <file> --session {args.session}"
+            f"namehunt run --brief <file> --session {args.session}"
         )
         return 1
     _validate_counts(args)
@@ -187,16 +235,16 @@ def _loop(
     except KeyboardInterrupt:
         save_session(sess)
         console.print()
-        console.print(f"session saved - resume with: uv run namehunt resume --session {sess.name}")
+        console.print(f"session saved - resume with: namehunt resume --session {sess.name}")
         return 0
     except Exception as exc:  # provider/CLI failure mid-round: keep state, fail cleanly
         save_session(sess)
         console.print(f"[red]error:[/] {escape(str(exc))}")
-        console.print(f"session saved - resume with: uv run namehunt resume --session {sess.name}")
+        console.print(f"session saved - resume with: namehunt resume --session {sess.name}")
         return 1
     save_session(sess)
     console.print(CAVEAT)
-    console.print(f"export with: uv run namehunt export --session {sess.name} --format md")
+    console.print(f"export with: namehunt export --session {sess.name} --format md")
     return 0
 
 
@@ -205,7 +253,7 @@ def _gather_feedback(console: Console, sess: Session) -> tuple[Session, bool]:
     last = sess.rounds[-1]
     while True:
         try:
-            line = console.input(f"{PROMPT} > ").strip()
+            line = console.input(f"{PROMPT} > ", markup=False).strip()  # [a] etc. stay visible
         except EOFError:
             return sess, True
         if not line:
@@ -231,7 +279,7 @@ def _gather_feedback(console: Console, sess: Session) -> tuple[Session, bool]:
             save_session(sess)
             console.print("note saved")
         else:
-            console.print(f"commands: {PROMPT}")
+            console.print(f"commands: {PROMPT}", markup=False)
 
 
 def _stems_from_numbers(rest: str, candidates: list[str], console: Console) -> list[str]:
@@ -323,7 +371,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser("run", parents=[loop_flags], help="start (or continue) a session")
     run.add_argument("--brief", help="path to a markdown/text brief (required on first run)")
-    run.add_argument("--tlds", default=DEFAULT_TLDS, help=f"comma-separated ({DEFAULT_TLDS})")
+    run.add_argument("--tlds", help=f"comma-separated (default {DEFAULT_TLDS}; fixed per session)")
+    run.add_argument(
+        "--require-tlds",
+        help="TLDs a name must have free to count as a win, e.g. com ('none' clears)",
+    )
     run.add_argument(
         "--provider",
         choices=["claude", "claudecode", "codexcli", "openai"],

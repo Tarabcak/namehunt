@@ -23,6 +23,7 @@ class ExportRow:
     statuses: dict[str, str]  # tld -> status value
     available_count: int
     liked: bool
+    has_required: bool  # every required TLD is AVAILABLE (True when none are required)
 
 
 def _rows(sess: Session) -> list[ExportRow]:
@@ -43,10 +44,14 @@ def _rows(sess: Session) -> list[ExportRow]:
                     1 for s in statuses.values() if s == Availability.AVAILABLE.value
                 ),
                 liked=stem in sess.likes,
+                has_required=all(
+                    statuses.get(t) == Availability.AVAILABLE.value for t in sess.required_tlds
+                ),
             )
         )
-    # Spec §1.6: available-TLD count descending, then liked first, then name.
-    rows.sort(key=lambda r: (-r.available_count, not r.liked, r.stem))
+    # Spec §1.6: every required TLD available first (§1.4), then available-TLD count
+    # descending, then liked first, then name.
+    rows.sort(key=lambda r: (not r.has_required, -r.available_count, not r.liked, r.stem))
     return rows
 
 
