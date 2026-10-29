@@ -36,7 +36,7 @@ This single file contains everything: the product spec (Part 1), the workflow ru
 ## 1.4 CLI interface
 
 ```
-namehunt run --brief brief.md [--tlds com,ai,io] [--batch 20] [--rounds 0] \
+namehunt run --brief brief.md [--tlds com,ai,io] [--require-tlds com] [--batch 20] [--rounds 0] \
              [--provider claude] [--model MODEL] [--style "short, mythic, 2 syllables"] \
              [--session mysession] [--fast-prefilter] [--debug]
 namehunt resume --session mysession
@@ -48,6 +48,14 @@ namehunt export --session mysession --format csv|json|md
 - `--rounds 0`: interactive mode (default); `--rounds N`: run N rounds autonomously, steering only on availability results.
 - `--fast-prefilter`: DoH DNS check (Cloudflare `https://cloudflare-dns.com/dns-query`) first; only NXDOMAIN candidates go to RDAP. **DNS is a heuristic only — never report "available" from DNS alone.**
 - `--session`: session name; state persisted to `~/.namehunt/sessions/<name>.json`.
+- `--require-tlds`: comma-separated subset of `--tlds`, stored in the session. A stem only counts as a
+  winner in the next prompt when every required TLD is AVAILABLE; a required TLD that is TAKEN makes the
+  stem a taken stem even if other TLDs are free. UNKNOWN still feeds neither list. The prompt names the
+  required TLDs, and export lists stems with every required TLD available first.
+- `run` on an existing session continues it with the session's own provider, model, style and TLDs.
+  `--provider`, `--model`, `--style` and `--require-tlds` given explicitly replace the stored values, so a
+  later `resume` uses them too. `NAMEHUNT_PROVIDER` only picks the provider of a new session. `--tlds`
+  that differ from the session's TLDs are an error (exit 2): start a new session to change TLDs.
 - `--debug`: print the full outgoing LLM prompt each round.
 
 ### Interactive round flow
@@ -57,6 +65,8 @@ After each round, render a `rich` table: name, per-TLD status (✅ available / �
 ```
 [a]nother round  [l]ike <numbers>  [d]islike <numbers>  [n]ote <free text>  [q]uit & export
 ```
+
+The prompt is printed literally (never parsed as `rich` markup), so the bracketed letters stay visible.
 
 Likes/dislikes/notes are stored in session state and included in the next LLM prompt.
 
@@ -97,14 +107,17 @@ brief + style + history summary
 
 ### Session state (JSON on disk)
 
-`brief_path`, `style`, `tlds`, `provider`, `model`, `rounds` (each: timestamp, candidates, per-TLD results), `likes`, `dislikes`, `notes`, cumulative `all_generated` set. Resume must reproduce the exact loop context.
+`brief_path`, `style`, `tlds`, `required_tlds` (older files without it load as none), `provider`, `model`, `rounds` (each: timestamp, candidates, per-TLD results), `likes`, `dislikes`, `notes`, cumulative `all_generated` set. Resume must reproduce the exact loop context.
 
 ## 1.6 Output & guardrails
 
 - Live `rich` table per round; `export` sorts by (available-TLD count desc, then liked first) to CSV/JSON/Markdown.
 - On every export and on quit, print: *"⚠️ RDAP 'available' is a strong signal, not a guarantee — premium/reserved names can still be unregisterable. Re-check at your registrar before buying, and run a trademark search."*
 - Missing API key → clear one-line error naming the env var, exit code 2.
-- Ctrl-C mid-round → save session state, print resume hint, exit 0.
+- Ctrl-C mid-round → save session state, print resume hint, exit 0. Hints name the plain `namehunt` command
+  (it may be installed with uv tool or run through uvx), never `uv run namehunt`.
+- A failing CLI provider reports the end of the CLI's error output, where the actual error is, not its
+  start-up banner.
 - All network calls have timeouts; no unbounded retries. No calls anywhere except the chosen LLM API, RDAP servers, and (optionally) Cloudflare DoH.
 
 ## 1.7 Suggested layout
