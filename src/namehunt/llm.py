@@ -39,7 +39,7 @@ _FENCE_OPEN_RE = re.compile(r"\A```[a-zA-Z]*\s*")
 _FENCE_CLOSE_RE = re.compile(r"\s*```\s*\Z")
 
 SYSTEM_PROMPT = (
-    "You are a precise startup naming engine. Respond with ONLY a JSON array of "
+    "You are a discerning brand naming director. Respond with ONLY a JSON array of "
     "candidate name stems: lowercase a-z only, 3-12 characters each, no digits, "
     "hyphens, spaces, or punctuation. No explanations, no code fences. "
     'Example: ["nova", "quill"]'
@@ -436,10 +436,10 @@ def build_messages(ctx: RoundContext) -> tuple[str, str]:
             "required domain taken are listed as taken below.",
             "",
         ]
-    lines.append("AVAILABLE DOMAINS (verified available - favor the patterns of these winners):")
+    lines.append("AVAILABLE DOMAINS (registry results, not creative endorsements):")
     lines += [f"- {d}" for d in ctx.available_domains] or ["(none yet)"]
     lines.append("")
-    lines.append("TAKEN STEMS (avoid similar patterns):")
+    lines.append("TAKEN STEMS (exact domains unavailable, not rejected creative directions):")
     lines += [f"- {s}" for s in ctx.taken_stems] or ["(none yet)"]
     lines.append("")
     if ctx.likes:
@@ -462,8 +462,18 @@ def build_messages(ctx: RoundContext) -> tuple[str, str]:
         lines.append("")
     lines.append(
         f"TASK: Generate exactly {ctx.batch} NEW candidate name stems for this brief. "
-        "Favor the patterns of the available and liked names; avoid the patterns of "
-        "the taken and disliked names. Never repeat any stem listed above. "
+        "Availability is not a quality score. User taste takes precedence over domain patterns. "
+        "A taken name can still be a useful creative reference; never copy an existing brand. "
+        "Explore at least four distinct creative territories suited to the brief: natural "
+        "spoken expressions, evocative metaphors, confident action phrases, and restrained "
+        "coinages. For small batches use as many territories as there are names. "
+        "For batches of eight or more, no more than a quarter should share a root word "
+        "or construction. Avoid mechanical synonym substitutions and random word pairs. "
+        "Privately develop a larger pool, then select for memorability, pronunciation, "
+        "emotional appeal, distinctiveness, and fit in a spoken recommendation. "
+        "Discard names that require a strained explanation to sound appealing. "
+        "Do not invent spellings just to obtain an available domain. "
+        "Never repeat any stem listed above. "
         "Return ONLY a JSON array of lowercase strings."
     )
     return SYSTEM_PROMPT, "\n".join(lines)

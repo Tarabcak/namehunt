@@ -300,19 +300,23 @@ def test_build_messages_no_notes_means_no_note_headers():
 
 
 def test_domain_feedback_is_not_a_creative_endorsement():
-    _, user = build_messages(make_ctx(
-        available_domains=['awkwardname.com'], taken_stems=['landit'],
-        likes=['landit'], dislikes=['awkwardname'],
-    ))
-    assert 'favor the patterns of these winners' not in user
-    assert 'avoid similar patterns' not in user
-    assert 'Availability is not a quality score' in user
-    assert 'User taste takes precedence over domain patterns' in user
+    _, user = build_messages(
+        make_ctx(
+            available_domains=["awkwardname.com"],
+            taken_stems=["landit"],
+            likes=["landit"],
+            dislikes=["awkwardname"],
+        )
+    )
+    assert "favor the patterns of these winners" not in user
+    assert "avoid similar patterns" not in user
+    assert "Availability is not a quality score" in user
+    assert "User taste takes precedence over domain patterns" in user
 
 
 def test_generation_requires_diverse_territories_and_editorial_selection():
     system, user = build_messages(make_ctx())
     prompt = system + user
-    assert 'at least four distinct creative territories' in prompt
-    assert 'no more than a quarter' in prompt
-    assert 'spoken recommendation' in prompt
+    assert "at least four distinct creative territories" in prompt
+    assert "no more than a quarter" in prompt
+    assert "spoken recommendation" in prompt
