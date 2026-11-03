@@ -115,6 +115,15 @@ uvx namehunt run --brief brief.md --provider codexcli --tlds cz \
 These are invocation options; supply them again when resuming. HTTP failures
 remain unknown, never available. Slower pacing does not guarantee registry uptime.
 
+## Creative direction
+
+Domain availability and creative quality are separate signals. An unregistered
+name is not automatically a good name; a taken name can still be a useful style
+reference. Generation prioritizes your likes, dislikes, and latest notes, explores
+several creative territories, and avoids filling a batch with the same root word.
+These are prompt-level instructions, not a guarantee of naming quality or a
+trademark check. Review the results before choosing a name.
+
 ## How availability works
 
 - ✅ available — the registry's RDAP says the domain doesn't exist
